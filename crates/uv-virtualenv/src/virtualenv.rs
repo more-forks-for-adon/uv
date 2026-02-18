@@ -124,10 +124,8 @@ pub(crate) fn create(
             let err = Err(Error::Io(io::Error::new(
                 io::ErrorKind::AlreadyExists,
                 format!(
-                    "A {name} already exists at: {}\n\n{}{} {hint}",
+                    "A {name} already exists at: {}\n\n{hint}",
                     location.user_display(),
-                    "hint".bold().cyan(),
-                    ":".bold(),
                 ),
             )));
             match on_existing {

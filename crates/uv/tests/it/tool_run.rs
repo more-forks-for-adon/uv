@@ -2363,8 +2363,6 @@ fn tool_run_hint_version_not_available() {
 
     ----- stderr -----
     error: No interpreter found for Python 3.12 in [PYTHON SOURCES]
-
-    hint: A managed Python download is available for Python 3.12, but Python downloads are set to 'never'
     ");
 
     uv_snapshot!(context.filters(), context.tool_run()
@@ -2377,8 +2375,6 @@ fn tool_run_hint_version_not_available() {
 
     ----- stderr -----
     error: No interpreter found for Python 3.12 in [PYTHON SOURCES]
-
-    hint: A managed Python download is available for Python 3.12, but uv is set to offline mode
     ");
 
     uv_snapshot!(context.filters(), context.tool_run()
@@ -2391,8 +2387,6 @@ fn tool_run_hint_version_not_available() {
 
     ----- stderr -----
     error: No interpreter found for Python 3.12 in [PYTHON SOURCES]
-
-    hint: A managed Python download is available for Python 3.12, but the Python preference is set to 'only system'
     ");
 }
 
@@ -2843,7 +2837,7 @@ fn tool_run_with_nonexistent_py_script() {
     ----- stdout -----
 
     ----- stderr -----
-    error: It looks like you provided a Python script to run, which is not supported supported by `uv tool run`
+    error: It looks like you provided a Python script to run, which is not supported by `uv tool run`
 
     hint: We did not find a script at the requested path. If you meant to run a command from the `script-py` package, pass the normalized package name to `--from` to disambiguate, e.g., `uv tool run --from script-py script.py`
     ");
@@ -2861,7 +2855,7 @@ fn tool_run_with_nonexistent_pyw_script() {
     ----- stdout -----
 
     ----- stderr -----
-    error: It looks like you provided a Python script to run, which is not supported supported by `uv tool run`
+    error: It looks like you provided a Python script to run, which is not supported by `uv tool run`
 
     hint: We did not find a script at the requested path. If you meant to run a command from the `script-pyw` package, pass the normalized package name to `--from` to disambiguate, e.g., `uv tool run --from script-pyw script.pyw`
     ");
@@ -2928,7 +2922,9 @@ fn tool_run_verbose_hint() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because nonexistent-package-foo was not found in the package registry and you require nonexistent-package-foo, we can conclude that your requirements are unsatisfiable.
-      help: You provided `--verbose` to `nonexistent-package-foo`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run --verbose nonexistent-package-foo`
+
+
+    hint: You provided `--verbose` to `nonexistent-package-foo`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run --verbose nonexistent-package-foo`
     ");
 
     // Test with -v flag
@@ -2944,7 +2940,9 @@ fn tool_run_verbose_hint() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because nonexistent-package-bar was not found in the package registry and you require nonexistent-package-bar, we can conclude that your requirements are unsatisfiable.
-      help: You provided `-v` to `nonexistent-package-bar`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run -v nonexistent-package-bar`
+
+
+    hint: You provided `-v` to `nonexistent-package-bar`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run -v nonexistent-package-bar`
     ");
 
     // Test with -vv flag
@@ -2960,7 +2958,9 @@ fn tool_run_verbose_hint() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because nonexistent-package-baz was not found in the package registry and you require nonexistent-package-baz, we can conclude that your requirements are unsatisfiable.
-      help: You provided `-vv` to `nonexistent-package-baz`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run -vv nonexistent-package-baz`
+
+
+    hint: You provided `-vv` to `nonexistent-package-baz`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run -vv nonexistent-package-baz`
     ");
 
     // Test for false positives

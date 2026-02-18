@@ -8,11 +8,20 @@ use version_ranges::Ranges;
 use uv_distribution_types::{
     DerivationChain, DerivationStep, Dist, DistErrorKind, Name, RequestedDist,
 };
+use uv_errors::Hint;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_resolver::SentinelRange;
 
 use crate::commands::pip;
+use crate::commands::pip::install::ExternallyManagedError;
+use crate::commands::pip::operations::ExtrasWithoutSourceError;
+use crate::commands::project::ProjectError;
+use crate::commands::project::remove::DependencyNotFoundError;
+use crate::commands::project::run::RecursionLimitError;
+use crate::commands::project::version::MissingProjectVersionError;
+use crate::commands::tool::common::NoExecutablesError;
+use crate::commands::tool::run::ToolRunScriptError;
 
 static SUGGESTIONS: LazyLock<FxHashMap<PackageName, PackageName>> = LazyLock::new(|| {
     let suggestions: Vec<(String, String)> =
@@ -77,7 +86,7 @@ impl OperationDiagnostic {
                 if let Some(context) = self.context {
                     no_solution_context(&err, context);
                 } else if let Some(hint) = self.hint {
-                    no_solution_hint(err, hint);
+                    no_solution_hint(&err, &hint);
                 } else {
                     no_solution(&err);
                 }
@@ -236,6 +245,7 @@ pub(crate) fn requested_dist_error(
                 }
             })
     });
+    let hints: Vec<String> = cause.hints().into_iter().map(Into::into).collect();
     let report = miette::Report::new(Diagnostic {
         kind,
         dist,
@@ -243,6 +253,7 @@ pub(crate) fn requested_dist_error(
         help,
     });
     anstream::eprint!("{report:?}");
+    render_hints(&hints);
 }
 
 /// Render an error in fetching a package's dependencies.
@@ -297,39 +308,32 @@ pub(crate) fn dependencies_error(
 
 /// Render a [`uv_resolver::NoSolutionError`].
 pub(crate) fn no_solution(err: &uv_resolver::NoSolutionError) {
-    let report = miette::Report::msg(format!("{err}")).context(err.header());
+    let report = miette::Report::msg(err.report().to_string()).context(err.header());
     anstream::eprint!("{report:?}");
+    let hints = err.pubgrub_hints();
+    render_hints(hints);
 }
 
 /// Render a [`uv_resolver::NoSolutionError`] with dedicated context.
 pub(crate) fn no_solution_context(err: &uv_resolver::NoSolutionError, context: &'static str) {
-    let report = miette::Report::msg(format!("{err}")).context(err.header().with_context(context));
+    let report =
+        miette::Report::msg(err.report().to_string()).context(err.header().with_context(context));
     anstream::eprint!("{report:?}");
+    let hints = err.pubgrub_hints();
+    render_hints(hints);
 }
 
 /// Render a [`uv_resolver::NoSolutionError`] with a help message.
 // https://github.com/rust-lang/rust/issues/147648
 #[allow(unused_assignments)]
-pub(crate) fn no_solution_hint(err: Box<uv_resolver::NoSolutionError>, help: String) {
-    #[derive(Debug, miette::Diagnostic, thiserror::Error)]
-    #[error("{header}")]
-    #[diagnostic()]
-    struct Error {
-        /// The header to render in the error message.
-        header: uv_resolver::NoSolutionHeader,
-
-        /// The underlying error.
-        #[source]
-        err: Box<uv_resolver::NoSolutionError>,
-
-        /// The help message to display.
-        #[help]
-        help: String,
-    }
-
-    let header = err.header();
-    let report = miette::Report::new(Error { header, err, help });
+pub(crate) fn no_solution_hint(err: &uv_resolver::NoSolutionError, help: &str) {
+    let report = miette::Report::msg(err.report().to_string()).context(err.header());
     anstream::eprint!("{report:?}");
+
+    // Render the caller-provided help as the first hint, followed by resolver hints.
+    render_hints(&[help]);
+    let hints = err.pubgrub_hints();
+    render_hints(hints);
 }
 
 /// Render a [`uv_resolver::NoSolutionError`] with a help message.
@@ -367,6 +371,56 @@ pub(crate) fn native_tls_hint(err: uv_client::Error) {
         ),
     });
     anstream::eprint!("{report:?}");
+}
+
+/// Render a set of hints to stderr.
+///
+/// Each hint is rendered on its own line, prefixed with `hint:`, after the
+/// error output.
+fn render_hints<'a>(hints: impl IntoIterator<Item = &'a (impl std::fmt::Display + 'a)>) {
+    for hint in hints {
+        anstream::eprint!("\n\n{} {hint}", uv_errors::HintPrefix);
+    }
+}
+
+/// Walk an error and collect hint strings from all known error types.
+///
+/// This is the central "hint for error" function. It inspects the error (and its chain
+/// via `source()`) and generates hint strings based on recognized error types. All hint
+/// rendering logic should be consolidated here.
+pub(crate) fn hints_for_error(err: &anyhow::Error) -> Vec<String> {
+    let mut hints = Vec::new();
+    collect_hints(err, &mut hints);
+    hints
+}
+
+/// Collect hints from an [`anyhow::Error`] by downcasting to known error types.
+///
+/// Uses `anyhow::Error::downcast_ref` on the outermost type. For wrapper types like
+/// `pip::operations::Error::Anyhow`, drills into the inner error explicitly.
+fn collect_hints(err: &anyhow::Error, hints: &mut Vec<String>) {
+    // Collect hints from error types that implement `Hint`.
+    collect_hint::<Box<uv_resolver::NoSolutionError>>(err, hints);
+    collect_hint::<uv_resolver::ResolveError>(err, hints);
+    collect_hint::<pip::operations::Error>(err, hints);
+    collect_hint::<ToolRunScriptError>(err, hints);
+    collect_hint::<RecursionLimitError>(err, hints);
+    collect_hint::<DependencyNotFoundError>(err, hints);
+    collect_hint::<ExtrasWithoutSourceError>(err, hints);
+    collect_hint::<ProjectError>(err, hints);
+    collect_hint::<NoExecutablesError>(err, hints);
+    collect_hint::<ExternallyManagedError>(err, hints);
+    collect_hint::<MissingProjectVersionError>(err, hints);
+}
+
+/// If `err` can be downcast to `T`, collect its hints.
+fn collect_hint<T: Hint + std::fmt::Debug + std::fmt::Display + Send + Sync + 'static>(
+    err: &anyhow::Error,
+    hints: &mut Vec<String>,
+) {
+    if let Some(inner) = err.downcast_ref::<T>() {
+        hints.extend(inner.hints().into_iter().map(Into::into));
+    }
 }
 
 /// Format a [`DerivationChain`] as a human-readable error message.

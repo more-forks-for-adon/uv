@@ -255,8 +255,6 @@ fn python_install_automatic() {
 
     ----- stderr -----
     error: No interpreter found in [PYTHON SOURCES]
-
-    hint: A managed Python download is available, but Python downloads are set to 'never'
     ");
 
     // Otherwise, we should fetch the latest Python version
@@ -3507,8 +3505,6 @@ fn uninstall_last_patch() {
     ----- stderr -----
     error: Failed to inspect Python interpreter from active virtual environment at `.venv/[BIN]/python`
       Caused by: Broken symlink at `.venv/[BIN]/python`, was the underlying Python interpreter removed?
-
-    hint: Consider recreating the environment (e.g., with `uv venv`)
     "
     );
 

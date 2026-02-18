@@ -873,17 +873,20 @@ impl Display for BrokenSymlink {
             f,
             "Broken symlink at `{}`, was the underlying Python interpreter removed?",
             self.path.user_display()
-        )?;
+        )
+    }
+}
+
+impl uv_errors::Hint for BrokenSymlink {
+    fn hints(&self) -> Vec<std::borrow::Cow<'_, str>> {
         if self.venv {
-            write!(
-                f,
-                "\n\n{}{} Consider recreating the environment (e.g., with `{}`)",
-                "hint".bold().cyan(),
-                ":".bold(),
+            vec![std::borrow::Cow::Owned(format!(
+                "Consider recreating the environment (e.g., with `{}`)",
                 "uv venv".green()
-            )?;
+            ))]
+        } else {
+            Vec::new()
         }
-        Ok(())
     }
 }
 

@@ -187,10 +187,9 @@ impl PythonInstallation {
                     if matches!(request, PythonRequest::Default | PythonRequest::Any) {
                         return Err(err);
                     }
-                    return Err(err.with_missing_python_hint(
-                        "uv embeds available Python downloads and may require an update to install new versions. Consider retrying on a newer version of uv."
-                            .to_string(),
-                    ));
+                    return Err(
+                        err.with_missing_python_hint(crate::MissingPythonHint::RequiresUpdate)
+                    );
                 }
                 None
             }
@@ -212,31 +211,25 @@ impl PythonInstallation {
 
         // If the download is available, but not usable, we attach a hint to the original error.
         if !downloads_enabled {
-            let for_request = match request {
-                PythonRequest::Default | PythonRequest::Any => String::new(),
-                _ => format!(" for {request}"),
-            };
-
             match python_downloads {
                 PythonDownloads::Automatic => {}
                 PythonDownloads::Manual => {
-                    return Err(err.with_missing_python_hint(format!(
-                        "A managed Python download is available{for_request}, but Python downloads are set to 'manual', use `uv python install {}` to install the required version",
-                        request.to_canonical_string(),
-                    )));
+                    return Err(err.with_missing_python_hint(
+                        crate::MissingPythonHint::DownloadsManual(request.clone()),
+                    ));
                 }
                 PythonDownloads::Never => {
-                    return Err(err.with_missing_python_hint(format!(
-                        "A managed Python download is available{for_request}, but Python downloads are set to 'never'"
-                    )));
+                    return Err(err.with_missing_python_hint(
+                        crate::MissingPythonHint::DownloadsNever(request.clone()),
+                    ));
                 }
             }
 
             match preference {
                 PythonPreference::OnlySystem => {
-                    return Err(err.with_missing_python_hint(format!(
-                        "A managed Python download is available{for_request}, but the Python preference is set to 'only system'"
-                    )));
+                    return Err(err.with_missing_python_hint(
+                        crate::MissingPythonHint::PreferenceOnlySystem(request.clone()),
+                    ));
                 }
                 PythonPreference::Managed
                 | PythonPreference::OnlyManaged
@@ -244,9 +237,8 @@ impl PythonInstallation {
             }
 
             if !client_builder.connectivity.is_online() {
-                return Err(err.with_missing_python_hint(format!(
-                    "A managed Python download is available{for_request}, but uv is set to offline mode"
-                )));
+                return Err(err
+                    .with_missing_python_hint(crate::MissingPythonHint::Offline(request.clone())));
             }
 
             return Err(err);

@@ -1109,8 +1109,6 @@ fn python_find_script_python_not_found() {
 
     ----- stderr -----
     No interpreter found in [PYTHON SOURCES]
-
-    hint: A managed Python download is available, but Python downloads are set to 'never'
     ");
 }
 
