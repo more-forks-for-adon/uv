@@ -15,6 +15,13 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{debug, trace, warn};
 
+use crate::implementation::LenientImplementationName;
+use crate::managed::ManagedPythonInstallations;
+use crate::pointer_size::PointerSize;
+use crate::{
+    Prefix, PythonInstallationKey, PythonVariant, PythonVersion, Target, VersionRequest,
+    VirtualEnvironment,
+};
 use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness};
 use uv_cache_info::Timestamp;
 use uv_cache_key::cache_digest;
@@ -27,14 +34,7 @@ use uv_pep508::{MarkerEnvironment, StringVersion};
 use uv_platform::{Arch, Libc, Os};
 use uv_platform_tags::{Platform, Tags, TagsError};
 use uv_pypi_types::{ResolverMarkerEnvironment, Scheme};
-
-use crate::implementation::LenientImplementationName;
-use crate::managed::ManagedPythonInstallations;
-use crate::pointer_size::PointerSize;
-use crate::{
-    Prefix, PythonInstallationKey, PythonVariant, PythonVersion, Target, VersionRequest,
-    VirtualEnvironment,
-};
+use uv_trampoline_builder::Launcher;
 
 #[cfg(windows)]
 use windows::Win32::Foundation::{APPMODEL_ERROR_NO_PACKAGE, ERROR_CANT_ACCESS_FILE, WIN32_ERROR};
@@ -1005,23 +1005,11 @@ impl InterpreterInfo {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
 
-            // Handle uninstalled Python interpreters on Windows.
-            //
-            // Example error with Python 3.12:
-            // ```
-            // No Python at '"C:\Users\Ferris\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\python.exe'
-            // ```
-            //
-            // Example error with Python 3.13:
-            // ```
-            // did not find executable at '"C:\Users\Ferris\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\python.exe': ...
-            // ```
-            // The underlying IO error is localized on Windows.
-            //
-            // TODO(konsti): Can we do this without the string parsing?
+            // Handle uninstalled Python interpreters on Windows. The IO error is unstructured, so
+            // we check whether the PYTHONHOME still exists as alternative
             if output.status.code() == Some(103)
-                && (stderr.contains("No Python at")
-                    || stderr.contains("did not find executable at"))
+                && let Ok(Some(launcher)) = Launcher::try_from_path(interpreter)
+                && !launcher.python_path.exists()
             {
                 return Err(Error::BrokenLink(BrokenLink {
                     path: interpreter.to_path_buf(),
