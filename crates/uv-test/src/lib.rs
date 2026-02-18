@@ -565,6 +565,22 @@ impl TestContext {
         self
     }
 
+    /// Add filters for the system temporary directory.
+    ///
+    /// pip creates temp directories in the system temp dir (not the test temp dir),
+    /// so the standard `[TEMP_DIR]` filter doesn't catch them. This method uses
+    /// [`Self::path_patterns`] to handle both canonicalized and non-canonicalized
+    /// forms and to normalize path separators across platforms.
+    #[must_use]
+    pub fn with_filtered_system_tmp(mut self) -> Self {
+        self.filters.extend(
+            Self::path_patterns(std::env::temp_dir())
+                .into_iter()
+                .map(|pattern| (pattern, "[SYSTEM_TEMP_DIR]/".to_string())),
+        );
+        self
+    }
+
     /// Add a filter for (bytecode) compilation file counts
     #[must_use]
     pub fn with_filtered_compiled_file_count(mut self) -> Self {
