@@ -1005,9 +1005,24 @@ impl InterpreterInfo {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
 
-            // Handle uninstalled Python interpreters on Windows
+            // Handle uninstalled Python interpreters on Windows.
+            //
+            // Example error with Python 3.12:
+            // ```
+            // No Python at '"C:\Users\Ferris\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\python.exe'
+            // ```
+            //
+            // Example error with Python 3.13:
+            // ```
+            // did not find executable at '"C:\Users\Ferris\AppData\Roaming\uv\python\cpython-3.13-windows-x86_64-none\python.exe': ...
+            // ```
+            // The underlying IO error is localized on Windows.
+            //
             // TODO(konsti): Can we do this without the string parsing?
-            if output.status.code() == Some(103) && stderr.contains("did not find executable at") {
+            if output.status.code() == Some(103)
+                && (stderr.contains("No Python at")
+                    || stderr.contains("did not find executable at"))
+            {
                 return Err(Error::BrokenLink(BrokenLink {
                     path: interpreter.to_path_buf(),
                     unix: false,
