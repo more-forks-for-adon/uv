@@ -19,8 +19,8 @@ use crate::implementation::LenientImplementationName;
 use crate::managed::ManagedPythonInstallations;
 use crate::pointer_size::PointerSize;
 use crate::{
-    Prefix, PythonInstallationKey, PythonVariant, PythonVersion, Target, VersionRequest,
-    VirtualEnvironment,
+    Prefix, PyVenvConfiguration, PythonInstallationKey, PythonVariant, PythonVersion, Target,
+    VersionRequest, VirtualEnvironment,
 };
 use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness};
 use uv_cache_info::Timestamp;
@@ -34,7 +34,6 @@ use uv_pep508::{MarkerEnvironment, StringVersion};
 use uv_platform::{Arch, Libc, Os};
 use uv_platform_tags::{Platform, Tags, TagsError};
 use uv_pypi_types::{ResolverMarkerEnvironment, Scheme};
-use uv_trampoline_builder::Launcher;
 
 #[cfg(windows)]
 use windows::Win32::Foundation::{APPMODEL_ERROR_NO_PACKAGE, ERROR_CANT_ACCESS_FILE, WIN32_ERROR};
@@ -1005,11 +1004,10 @@ impl InterpreterInfo {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
 
-            // Handle uninstalled Python interpreters on Windows. The IO error is unstructured, so
-            // we check whether the PYTHONHOME still exists as alternative
+            // Handle uninstalled Python interpreters on Windows. The IO error is unstructured
+            // and localized, so we check whether the `home` from `pyvenv.cfg` still exists.
             if output.status.code() == Some(103)
-                && let Ok(Some(launcher)) = Launcher::try_from_path(interpreter)
-                && !launcher.python_path.exists()
+                && python_home(interpreter).is_some_and(|home| !home.exists())
             {
                 return Err(Error::BrokenLink(BrokenLink {
                     path: interpreter.to_path_buf(),
@@ -1296,6 +1294,13 @@ fn find_base_python(
 
         executable = Cow::Owned(resolved);
     }
+}
+
+/// Parse the `home` key from `pyvenv.cfg`, if any.
+fn python_home(interpreter: &Path) -> Option<PathBuf> {
+    let venv_root = interpreter.parent()?.parent()?;
+    let pyvenv_cfg = PyVenvConfiguration::parse(venv_root.join("pyvenv.cfg")).ok()?;
+    pyvenv_cfg.home
 }
 
 #[cfg(unix)]
